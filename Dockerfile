@@ -1,5 +1,5 @@
-# Use OpenJDK 17 base image
-FROM openjdk:17-jdk
+# Use OpenJDK 11 base image
+FROM openjdk:11-jdk
 
 # Add metadata about the image (optional but recommended)
 LABEL maintainer="baeldung.com"
