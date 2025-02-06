@@ -8,7 +8,7 @@ LABEL maintainer="baeldung.com"
 ADD target/MyFirstJavaProject-0.0.1-SNAPSHOT.jar app.jar
 
 # Expose the port the application will run on (modify if needed)
-EXPOSE 8080
+EXPOSE 7070
 
 # Set the entry point to run the JAR file
 ENTRYPOINT ["java", "-jar", "/app.jar"]
