@@ -1,0 +1,112 @@
+- hosts: all
+  become: true
+  vars:
+    repo_url: "https://github.com/Adarsh0871/java-application.git"
+    branch: "main"
+    app_directory: "/opt/inventory_mgmt"
+    docker_image_name: "my-java-app"
+    container_name: "inventory_contnr"
+    app_port: 7070
+    timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    docker_image_tag: "latest"
+
+  tasks:
+  - name: Ensure the application directory exists
+    file:
+      path: "{{ app_directory }}"
+      state: directory
+      mode: '0755'
+
+  - name: Clone the repository
+    git:
+      repo: "{{ repo_url }}"
+      dest: "{{ app_directory }}"
+      version: "{{ branch }}"
+      force: yes
+    register: git_clone_result
+
+  - name: Check if pom.xml exists
+    stat:
+      path: "{{ app_directory }}/pom.xml"
+    register: pom_status
+
+  - name: Build the WAR file using Maven
+    shell: mvn clean package
+    args:
+      chdir: "{{ app_directory }}"
+    when: pom_status.stat.exists
+    register: maven_build_status
+
+  - name: Ensure Python pip is installed
+    apt:
+      name: python3-pip
+      state: present
+
+  - name: Install Docker SDK for Python
+    pip:
+      name: docker
+    become: yes
+
+  - name: Install requests library
+    pip:
+      name: requests
+    become: yes
+
+  - name: Debug target directory contents
+    shell: ls -l {{ app_directory }}/target
+    register: target_dir_contents
+    when: maven_build_status.rc == 0
+
+  - name: Show target directory contents
+    debug:
+      var: target_dir_contents.stdout
+    when: maven_build_status.rc == 0
+
+  - name: Ensure the application JAR is in the build context
+    copy:
+      src: "{{ app_directory }}/target/MyFirstJavaProject-0.0.1-SNAPSHOT.jar"
+      dest: "{{ app_directory }}/MyFirstJavaProject.jar"
+      remote_src: yes
+    when: maven_build_status.rc == 0
+
+  - name: Stop and remove the old container if it exists
+    community.docker.docker_container:
+      name: "{{ container_name }}"
+      state: absent
+      force_kill: yes  
+
+  - name: Remove the associated Docker volumes
+    community.docker.docker_volume:
+      name: "{{ container_name }}_volume"  
+      state: absent
+
+  - name: Remove the old Docker image if it exists
+    community.docker.docker_image:
+      name: "{{ docker_image_name }}"
+      state: absent
+
+  - name: Build the Docker image on the remote server
+    community.docker.docker_image:
+      name: "{{ docker_image_name }}:{{ docker_image_tag }}"
+      build:
+        path: "{{ app_directory }}"  
+      state: present
+      source: build
+
+
+  # - name: Check if Docker image exists
+  #   community.docker.docker_image_facts:
+  #   register: image_facts   
+
+  - name: Debug Docker images
+    debug:
+      var: image_facts.images
+
+  - name: Run the Docker container
+    community.docker.docker_container:
+      name: "{{ container_name }}"
+      image: "{{ docker_image_name }}:{{ docker_image_tag }}"
+      state: started
+      restart_policy: always
+      published_ports:
+        - "{{ app_port }}:7070"
